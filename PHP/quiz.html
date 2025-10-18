@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz - Quiz App</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        
+        .quiz-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+        
+        .progress-bar {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 10px;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        
+        .progress {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        
+        .question-container {
+            margin-bottom: 30px;
+        }
+        
+        .question-text {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        .options-container {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .option {
+            padding: 15px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .option.selected {
+            border-color: #667eea;
+            background: #667eea;
+            color: white;
+        }
+        
+        .option.correct {
+            border-color: #28a745;
+            background: #28a745;
+            color: white;
+        }
+        
+        .option.incorrect {
+            border-color: #dc3545;
+            background: #dc3545;
+            color: white;
+        }
+        
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        
+        .nav-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-prev {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-next {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-submit {
+            background: #28a745;
+            color: white;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="quiz-header">
+            <div class="quiz-title">Quiz Session</div>
+            <div class="quiz-progress">
+                Question <span id="currentQuestion">1</span> of <span id="totalQuestions">0</span>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress" id="progressBar" style="width: 0%"></div>
+        </div>
+        
+        <div id="quizContent">
+            <div class="question-container">
+                <div class="question-text" id="questionText">Loading question...</div>
+                <div class="options-container" id="optionsContainer">
+                    <!-- Options will be loaded here -->
+                </div>
+            </div>
+            
+            <div class="navigation">
+                <button class="nav-btn btn-prev" id="prevBtn" onclick="previousQuestion()" disabled>Previous</button>
+                <button class="nav-btn btn-next" id="nextBtn" onclick="nextQuestion()">Next</button>
+                <button class="nav-btn btn-submit hidden" id="submitBtn" onclick="submitQuiz()">Submit Quiz</button>
+            </div>
+        </div>
+        
+        <div id="resultsContainer" class="hidden">
+            <!-- Results will be shown here -->
+        </div>
+    </div>
+
+    <script>
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let userAnswers = {};
+        let quizSubmitted = false;
+
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const questionLimit = urlParams.get('questions') || 10;
+
+        // Load questions when page loads
+        window.addEventListener('load', () => {
+            loadQuestions();
+        });
+
+        async function loadQuestions() {
+            try {
+                const response = await fetch(`get_questions.php?limit=${questionLimit}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    questions = data.data.questions;
+                    document.getElementById('totalQuestions').textContent = questions.length;
+                    showQuestion(0);
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Failed to load questions'
+                    });
+                }
+            } catch (error) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Connection Error',
+                    text: 'Failed to connect to server'
+                });
+            }
+        }
+
+        function showQuestion(index) {
+            if (index < 0 || index >= questions.length) return;
+            
+            currentQuestionIndex = index;
+            const question = questions[index];
+            
+            // Update progress
+            document.getElementById('currentQuestion').textContent = index + 1;
+            const progress = ((index + 1) / questions.length) * 100;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+            
+            // Show question text
+            document.getElementById('questionText').textContent = question.question;
+            
+            // Show options
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = '';
+            
+            Object.entries(question.options).forEach(([key, value]) => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'option';
+                optionDiv.textContent = `${key}. ${value}`;
+                optionDiv.onclick = () => selectOption(key, optionDiv);
+                
+                // Mark if already answered
+                if (userAnswers[question.id] === key) {
+                    optionDiv.classList.add('selected');
+                }
+                
+                optionsContainer.appendChild(optionDiv);
+            });
+            
+            // Update navigation buttons
+            document.getElementById('prevBtn').disabled = index === 0;
+            document.getElementById('nextBtn').classList.toggle('hidden', index === questions.length - 1);
+            document.getElementById('submitBtn').classList.toggle('hidden', index !== questions.length - 1);
+        }
+
+        function selectOption(optionKey, optionElement) {
+            if (quizSubmitted) return;
+            
+            // Remove selected class from all options
+            const options = document.querySelectorAll('.option');
+            options.forEach(opt => opt.classList.remove('selected'));
+            
+            // Add selected class to clicked option
+            optionElement.classList.add('selected');
+            
+            // Save answer
+            const currentQuestion = questions[currentQuestionIndex];
+            userAnswers[currentQuestion.id] = optionKey;
+        }
+
+        function previousQuestion() {
+            if (currentQuestionIndex > 0) {
+                showQuestion(currentQuestionIndex - 1);
+            }
+        }
+
+        function nextQuestion() {
+            if (currentQuestionIndex < questions.length - 1) {
+                showQuestion(currentQuestionIndex + 1);
+            }
+        }
+
+        async function submitQuiz() {
+            if (Object.keys(userAnswers).length < questions.length) {
+                const result = await Swal.fire({
+                    title: 'Incomplete Quiz',
+                    text: 'You have not answered all questions. Submit anyway?',
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Submit',
+                    cancelButtonText: 'Continue'
+                });
+                
+                if (!result.isConfirmed) return;
+            }
+            
+            quizSubmitted = true;
+            calculateResults();
+        }
+
+        function calculateResults() {
+            let correct = 0;
+            let results = [];
+            
+            questions.forEach(question => {
+                const userAnswer = userAnswers[question.id];
+                const isCorrect = userAnswer === question.correct_option;
+                
+                if (isCorrect) correct++;
+                
+                results.push({
+                    question: question.question,
+                    userAnswer,
+                    correctAnswer: question.correct_option,
+                    isCorrect,
+                    options: question.options
+                });
+            });
+            
+            const score = Math.round((correct / questions.length) * 100);
+            showResults(score, correct, questions.length, results);
+        }
+
+        function showResults(score, correct, total, results) {
+            document.getElementById('quizContent').classList.add('hidden');
+            document.getElementById('resultsContainer').classList.remove('hidden');
+            
+            const resultsHTML = `
+                <div style="text-align: center; padding: 20px;">
+                    <h2 style="color: #333; margin-bottom: 20px;">Quiz Completed!</h2>
+                    <div style="font-size: 48px; color: #667eea; margin-bottom: 10px;">${score}%</div>
+                    <div style="color: #666; margin-bottom: 30px;">
+                        You got ${correct} out of ${total} questions correct
+                    </div>
+                    
+                    <div style="margin-top: 30px;">
+                        <a href="quiz_start.html" class="nav-btn btn-primary" style="text-decoration: none; display: inline-block; margin-right: 10px;">
+                            Take Another Quiz
+                        </a>
+                        <a href="index.html" class="nav-btn btn-secondary" style="text-decoration: none; display: inline-block;">
+                            Back to Dashboard
+                        </a>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('resultsContainer').innerHTML = resultsHTML;
+        }
+    </script>
+</body>
+</html>
